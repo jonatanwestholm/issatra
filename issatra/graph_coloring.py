@@ -39,9 +39,7 @@ def draw_solution(G, node2col):
     nx.draw_networkx(G, node_color=node2col)
     plt.show()
 
-def main():
-    # problem definition
-    G, num_colors = get_graph(2)
+def color_graph(G, num_colors):
     N = len(G) # number of nodes
 
     # decision variable creation
@@ -54,6 +52,7 @@ def main():
 
     # adjacent nodes may not have the same color
     for u, v in G.edges:
+        #print("constraining edge:", u, v)
         u_col = node_col2pick[u]
         v_col = node_col2pick[v]
         for u_pick, v_pick in zip(u_col, v_col):
@@ -63,14 +62,17 @@ def main():
     print("Satisfiable:", status)
 
     if not status:
-        return
+        return None
 
     # recover solution
     node_col_solved = [solver.solution_values(col2pick) 
                             for col2pick in node_col2pick]
     node2col = [node_col.index(1) for node_col in node_col_solved]
-    draw_solution(G, node2col)
+    return node2col
 
 
 if __name__ == '__main__':
-    main()
+    G, num_colors = get_graph(2)
+    node2col = color_graph(G, num_colors)
+    if node2col is not None:
+        draw_solution(G, node2col)
