@@ -1,3 +1,4 @@
+import time
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.patches import Circle
@@ -58,7 +59,10 @@ def color_graph(G, num_colors):
         for u_pick, v_pick in zip(u_col, v_col):
             solver.add([-u_pick, -v_pick])
 
+    solver.print_stats()
+    t0 = time.time()
     status = solver.solve()
+    print("Time: {0:.3f}".format(time.time() - t0))
     print("Satisfiable:", status)
 
     if not status:
