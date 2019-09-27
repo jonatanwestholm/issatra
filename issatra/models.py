@@ -1,9 +1,10 @@
 import time
+import numpy as np
 
 import networkx as nx
 from sugarrush.solver import SugarRush
 from garageofcode.mip.solver import get_solver
-from issatra.utils import flatten
+from issatra.utils import flatten, max_var
 
 def color_graph_sat(G, num_colors=None):
     N = len(G) # number of nodes
@@ -136,18 +137,41 @@ def color_graph_mip(intervals, num_colors, mutex="pairwise"):
     elif mutex == "cliques":
         mutex_groups = intervals2cliques(intervals)
 
+    if num_colors is None:
+        optimize = True
+        num_colors = N
+    else:
+        optimize = False
+
     solver = get_solver("CBC")
     node_col2pick = [[solver.IntVar(0, 1) for _ in range(num_colors)] for _ in range(N)]
 
     for col2pick in node_col2pick:
-        solver.Add(solver.Sum(col2pick) == 1)
+        solver.Add(solver.Sum(col2pick) >= 1)
 
     #for u, v in G.edges:
     #    for u_col, v_col in zip(node_col2pick[u], node_col2pick[v]):
     #        solver.Add(u_col + v_col <= 1)
+    #print("num mutex groups:", len(mutex_groups))
     for mutex_group in mutex_groups:
         for node2pick in zip(*[node_col2pick[idx] for idx in mutex_group]):
             solver.Add(solver.Sum(node2pick) <= 1)
+
+    if optimize:
+        '''
+        use_cols = [max_var(solver, node2pick) 
+                        for node2pick in zip(*node_col2pick)]
+        # symmetry breaking - force ordered
+        for uc0, uc1 in zip(use_cols, use_cols[1:]):
+            solver.Add(uc1 <= uc0)
+        used_colors = solver.Sum(use_cols)
+        solver.SetObjective(used_colors, maximize=False)
+        '''
+        col_cost = np.linspace(0, 1.0, num_colors)
+        col2num_picked = [solver.Sum(node2pick) 
+                            for node2pick in zip(*node_col2pick)]
+        cost = solver.Dot(col2num_picked, col_cost)
+        solver.SetObjective(cost, maximize=False)
 
     status = solver.Solve(time_limit=10)
 
@@ -156,6 +180,7 @@ def color_graph_mip(intervals, num_colors, mutex="pairwise"):
                                 for pick in col2pick]
                                     for col2pick in node_col2pick]
         node2col = [node_col.index(1) for node_col in node_col_solved]
+        print("used colors:", len(set(node2col)))
         return node2col
     else:
         return None
@@ -167,4 +192,4 @@ def color_intervals(intervals, num_colors=None,
         G = intervals2graph(intervals)
         return color_graph_sat(G, num_colors)
     elif method == "mip":
-        return color_graph_mip(intervals, num_colors, mutex)
+        return color_graph_mip(intervals, num_colors=None, mutex="cliques")
