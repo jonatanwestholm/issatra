@@ -6,13 +6,21 @@ from matplotlib.patches import Rectangle
 import networkx as nx
 from sugarrush.solver import SugarRush
 from issatra.graph_coloring import color_graph
-from issatra.utils import flatten
+from issatra.utils import flatten, optimize
 
 colors = ["r", "g", "b", "y", "m", "c", "k"]
 
 def get_intervals(N=10, start=0, end=10):
     intervals = np.random.random([N, 2]) * (end - start) + start
     intervals = [list(sorted(ij)) for ij in intervals]
+    return intervals
+
+
+def get_discrete_intervals(N=10, start=0, end=10):
+    end = end - 1
+    intervals = np.random.random([N, 2]) * (end - start) + start
+    intervals = [list(sorted(ij)) for ij in intervals]
+    intervals = [(int(i), int(j) + 1) for i, j in intervals]
     return intervals
 
 
@@ -59,6 +67,19 @@ def intervals2cliques(intervals):
         if len(current) > 1 and tuple(current) not in cliques:
             cliques.append(tuple(current))
 
+    # remove cliques which are subsets of other cliques
+    # they produce redundant constraints
+    to_be_removed = []
+    cliques = [set(clique) for clique in sorted(cliques, key=len)]
+    for idx, c0 in enumerate(cliques):
+        for c1 in cliques[idx+1:]:
+            if c0.issubset(c1):
+                to_be_removed.append(c0)
+                break
+
+    for clique in to_be_removed:
+        cliques.remove(clique)
+
     #[print(clique) for clique in cliques]
     return cliques
 
@@ -76,9 +97,14 @@ def color_intervals(intervals, num_colors):
     # for each conflict clique, at most one of each color
     cliques = intervals2cliques(intervals)
     for clique in cliques:
+        print(clique)
         node_cols = [node_col2pick[c] for c in clique]
         for node2pick in zip(*node_cols):
-            solver.add(solver.atmost(node2pick, bound=1, encoding=1))
+            #print("clique:", node2pick)
+            atmost_clauses = solver.atmost(node2pick, bound=1, encoding=1)
+            #print("atmost:", atmost_clauses)
+            #print()
+            solver.add(atmost_clauses)
 
     solver.print_stats()
     t0 = time.time()
@@ -98,14 +124,17 @@ def color_intervals(intervals, num_colors):
 
 def main():
     np.random.seed(1)
-    intervals = get_intervals(N=100, end=100)
+    intervals = get_discrete_intervals(N=100, end=100)
+    #print(intervals)
     #intervals2cliques(intervals)
-    num_colors = 60
-    print("Direct conflict constraints:")
-    G = intervals2graph(intervals)
-    interval2color = color_graph(G, num_colors)
-    #print("Clique constraints")
-    #interval2color = color_intervals(intervals, num_colors)
+    #num_colors = 60
+    if 1:
+        print("Direct conflict constraints:")
+        G = intervals2graph(intervals)
+        interval2color = color_graph(G)
+    else:
+        print("Clique constraints")
+        interval2color = color_intervals(intervals, num_colors)
     #plot_intervals(intervals, interval2color)
 
 
