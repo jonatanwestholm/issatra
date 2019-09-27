@@ -3,6 +3,7 @@ import time
 import networkx as nx
 from sugarrush.solver import SugarRush
 from garageofcode.mip.solver import get_solver
+from issatra.utils import flatten
 
 def color_graph_sat(G, num_colors=None):
     N = len(G) # number of nodes
@@ -92,8 +93,48 @@ def intervals2graph(intervals):
     return G
 
 
-def color_graph_mip(G, num_colors):
-    N = len(G)
+def intervals2cliques(intervals):
+    cliques = []
+    current = []
+    endpoints = [[(i, 1, idx), (j, 0, idx)] 
+                    for idx, (i, j) in enumerate(intervals)]
+    endpoints = sorted(flatten(endpoints))
+
+    for x, is_start, idx in endpoints:
+        #print(x, is_start, idx)
+        #print(current)
+        if is_start:
+            current.append(idx)
+        else:
+            current.remove(idx)
+        if len(current) > 1 and tuple(current) not in cliques:
+            cliques.append(tuple(current))
+
+    # remove cliques which are subsets of other cliques
+    # they produce redundant constraints
+    to_be_removed = []
+    cliques = [set(clique) for clique in sorted(cliques, key=len)]
+    for idx, c0 in enumerate(cliques):
+        for c1 in cliques[idx+1:]:
+            if c0.issubset(c1):
+                to_be_removed.append(c0)
+                break
+
+    for clique in to_be_removed:
+        cliques.remove(clique)
+
+    #[print(clique) for clique in cliques]
+    return cliques
+
+
+def color_graph_mip(intervals, num_colors, mutex="pairwise"):
+    N = len(intervals)
+
+    if mutex == "pairwise":
+        G = intervals2graph(intervals)
+        mutex_groups = G.edges
+    elif mutex == "cliques":
+        mutex_groups = intervals2cliques(intervals)
 
     solver = get_solver("CBC")
     node_col2pick = [[solver.IntVar(0, 1) for _ in range(num_colors)] for _ in range(N)]
@@ -101,9 +142,12 @@ def color_graph_mip(G, num_colors):
     for col2pick in node_col2pick:
         solver.Add(solver.Sum(col2pick) == 1)
 
-    for u, v in G.edges:
-        for u_col, v_col in zip(node_col2pick[u], node_col2pick[v]):
-            solver.Add(u_col + v_col <= 1)
+    #for u, v in G.edges:
+    #    for u_col, v_col in zip(node_col2pick[u], node_col2pick[v]):
+    #        solver.Add(u_col + v_col <= 1)
+    for mutex_group in mutex_groups:
+        for node2pick in zip(*[node_col2pick[idx] for idx in mutex_group]):
+            solver.Add(solver.Sum(node2pick) <= 1)
 
     status = solver.Solve(time_limit=10)
 
@@ -112,16 +156,15 @@ def color_graph_mip(G, num_colors):
                                 for pick in col2pick]
                                     for col2pick in node_col2pick]
         node2col = [node_col.index(1) for node_col in node_col_solved]
-        print(node2col)
         return node2col
     else:
         return None
 
 
-def color_intervals(intervals, num_colors=None, method="sat"):
-    G = intervals2graph(intervals)
-    
+def color_intervals(intervals, num_colors=None, 
+                    method="sat", mutex="pairwise"):
     if method == "sat":
+        G = intervals2graph(intervals)
         return color_graph_sat(G, num_colors)
     elif method == "mip":
-        return color_graph_mip(G, num_colors)
+        return color_graph_mip(intervals, num_colors, mutex)
