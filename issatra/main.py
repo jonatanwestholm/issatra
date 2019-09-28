@@ -3,7 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.patches import Rectangle
 
-from issatra.models import color_intervals
+from issatra.models import color_intervals, minimize_spill
 from issatra.utils import flatten, optimize
 
 colors = ["r", "g", "b", "y", "m", "c", "k"]
@@ -24,10 +24,11 @@ def get_discrete_intervals(N=10, start=0, end=10):
 
 def main():
     np.random.seed(1)
-    intervals = get_discrete_intervals(N=32, end=1000)
-    interval2color = color_intervals(intervals, num_colors=None, 
-                                     method="mip", mutex="cliques")
-    #plot_intervals(intervals, interval2color)
+    intervals = get_discrete_intervals(N=100, end=100)
+    #interval2color = color_intervals(intervals, num_colors=None, 
+    #                                 method="mip", mutex="cliques")
+    interval2color = minimize_spill(intervals, num_registers=32)
+    plot_intervals(intervals, interval2color)
 
 
 def plot_intervals(intervals, interval2color=None):
@@ -36,10 +37,12 @@ def plot_intervals(intervals, interval2color=None):
     margin = 0.05
     for idx, (i, j) in enumerate(intervals):
         if interval2color is not None:
-            col = interval2color[idx]
-            col = colors[col]
+            if interval2color[idx] is not None:
+                col = "b"
+            else:
+                col = "r"
         else:
-            col = "b"
+            col = "k"
         rect = Rectangle((i, idx), (j - i) - margin, 1 - margin, color=col)
         ax.add_patch(rect)
 

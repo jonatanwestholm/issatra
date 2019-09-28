@@ -195,10 +195,11 @@ def minimize_spill(intervals, num_registers, optimize=True):
 
     if optimize:
         var_value = [j - i for i, j in intervals] # live range length
+        #var_value = [1 for c in intervals]
         value = solver.Dot(var2assigned, var_value)
         solver.SetObjective(value, maximize=True)
 
-    status = solver.Solve(time_limit=10)
+    status = solver.Solve(time_limit=100)
     if status < 2:
         var2reg = []
         for reg2pick in var_reg2pick:
