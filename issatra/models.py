@@ -128,7 +128,7 @@ def intervals2cliques(intervals):
     return cliques
 
 
-def color_graph_mip(intervals, num_colors, mutex="pairwise"):
+def color_graph_mip(intervals, num_colors, mutex):
     N = len(intervals)
 
     if mutex == "pairwise":
@@ -149,31 +149,19 @@ def color_graph_mip(intervals, num_colors, mutex="pairwise"):
     for col2pick in node_col2pick:
         solver.Add(solver.Sum(col2pick) >= 1)
 
-    #for u, v in G.edges:
-    #    for u_col, v_col in zip(node_col2pick[u], node_col2pick[v]):
-    #        solver.Add(u_col + v_col <= 1)
-    #print("num mutex groups:", len(mutex_groups))
+    print("num mutex groups:", len(mutex_groups))
     for mutex_group in mutex_groups:
         for node2pick in zip(*[node_col2pick[idx] for idx in mutex_group]):
             solver.Add(solver.Sum(node2pick) <= 1)
 
     if optimize:
-        '''
-        use_cols = [max_var(solver, node2pick) 
-                        for node2pick in zip(*node_col2pick)]
-        # symmetry breaking - force ordered
-        for uc0, uc1 in zip(use_cols, use_cols[1:]):
-            solver.Add(uc1 <= uc0)
-        used_colors = solver.Sum(use_cols)
-        solver.SetObjective(used_colors, maximize=False)
-        '''
         col_cost = np.linspace(0, 1.0, num_colors)
         col2num_picked = [solver.Sum(node2pick) 
                             for node2pick in zip(*node_col2pick)]
         cost = solver.Dot(col2num_picked, col_cost)
         solver.SetObjective(cost, maximize=False)
 
-    status = solver.Solve(time_limit=10)
+    status = solver.Solve(time_limit=100)
 
     if status < 2:
         node_col_solved = [[solver.solution_value(pick) 
@@ -185,6 +173,51 @@ def color_graph_mip(intervals, num_colors, mutex="pairwise"):
     else:
         return None
 
+def minimize_spill(intervals, num_registers, optimize=True):
+    N = len(intervals)
+
+    solver = get_solver("CBC")
+    var_reg2pick = [[solver.IntVar(0, 1) for _ in range(num_registers)] 
+                                            for _ in range(N)]
+
+    # at most one register per variable
+    var2assigned = []
+    for reg2pick in var_reg2pick:
+        assigned = solver.Sum(reg2pick) # is variable assigned to a register?
+        var2assigned.append(assigned)
+        solver.Add(assigned <= 1)
+
+    # variables that are live at the same time cannot share a register
+    mutexes = intervals2cliques(intervals)
+    for mutex in mutexes:
+        for var2pick in zip(*[var_reg2pick[idx] for idx in mutex]):
+            solver.Add(solver.Sum(var2pick) <= 1)
+
+    if optimize:
+        var_value = [j - i for i, j in intervals] # live range length
+        value = solver.Dot(var2assigned, var_value)
+        solver.SetObjective(value, maximize=True)
+
+    status = solver.Solve(time_limit=10)
+    if status < 2:
+        var2reg = []
+        for reg2pick in var_reg2pick:
+            reg2pick_solved = [solver.solution_value(pick) for pick in reg2pick]
+            if 1 in reg2pick_solved:
+                var2reg.append(reg2pick_solved.index(1))
+            else:
+                var2reg.append(None)
+        v = [reg for reg in var2reg if reg is not None]
+        assigned_variables = len(v)
+        spilled_variables = len(var2reg) - assigned_variables
+        used_registers = len(set(v))
+        print("Assigned variables", assigned_variables)
+        print("Spilled variables:", spilled_variables)
+        print("Used registers:", used_registers)
+        return var2reg
+    else:
+        return None
+
 
 def color_intervals(intervals, num_colors=None, 
                     method="sat", mutex="pairwise"):
@@ -192,4 +225,4 @@ def color_intervals(intervals, num_colors=None,
         G = intervals2graph(intervals)
         return color_graph_sat(G, num_colors)
     elif method == "mip":
-        return color_graph_mip(intervals, num_colors=None, mutex="cliques")
+        return color_graph_mip(intervals, num_colors, mutex)

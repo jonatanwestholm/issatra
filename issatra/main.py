@@ -24,8 +24,8 @@ def get_discrete_intervals(N=10, start=0, end=10):
 
 def main():
     np.random.seed(1)
-    intervals = get_discrete_intervals(N=100, end=100)
-    interval2color = color_intervals(intervals, num_colors=51, 
+    intervals = get_discrete_intervals(N=32, end=1000)
+    interval2color = color_intervals(intervals, num_colors=None, 
                                      method="mip", mutex="cliques")
     #plot_intervals(intervals, interval2color)
 
