@@ -174,6 +174,16 @@ def color_graph_mip(intervals, num_colors, mutex):
     else:
         return None
 
+
+def color_intervals(intervals, num_colors=None, 
+                    method="sat", mutex="pairwise"):
+    if method == "sat":
+        G = intervals2graph(intervals)
+        return color_graph_sat(G, num_colors)
+    elif method == "mip":
+        return color_graph_mip(intervals, num_colors, mutex)
+
+
 def minimize_spill(intervals, num_registers, optimize=True):
     N = len(intervals)
 
@@ -202,7 +212,7 @@ def minimize_spill(intervals, num_registers, optimize=True):
         var_reg2pick_solved = solver.solution_value(var_reg2pick)
         picked_idx = lambda x: x.index(1) if 1 in x else None
         var2reg = list(map(picked_idx, var_reg2pick_solved))
-        
+
         v = [reg for reg in var2reg if reg is not None]
         assigned_variables = len(v)
         spilled_variables = len(var2reg) - assigned_variables
@@ -215,10 +225,24 @@ def minimize_spill(intervals, num_registers, optimize=True):
         return None
 
 
-def color_intervals(intervals, num_colors=None, 
-                    method="sat", mutex="pairwise"):
-    if method == "sat":
-        G = intervals2graph(intervals)
-        return color_graph_sat(G, num_colors)
-    elif method == "mip":
-        return color_graph_mip(intervals, num_colors, mutex)
+def schedule_dag(G):
+    N = len(G)
+
+    solver = get_solver("CBC")
+    issue_cycles = [solver.var(lb=0, integer=False) for _ in range(N)]
+
+    for u, v, latency in G.edges(data="latency"):
+        ui = issue_cycles[u]        
+        vi = issue_cycles[v]
+        solver.add(ui + latency <= vi)
+
+    terminals = [u for u in G if not G[u]]
+    makespan = solver.max_var(terminals, lb=0)
+    solver.set_objective(makespan, maximize=False)
+
+    status = solver.solve(time_limit=10)
+
+    if status:
+        return solver.solution_value(issue_cycles)
+    else:
+        return None
