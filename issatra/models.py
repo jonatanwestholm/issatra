@@ -3,7 +3,8 @@ import numpy as np
 
 import networkx as nx
 from sugarrush.solver import SugarRush
-from garageofcode.mip.solver import get_solver
+#from garageofcode.mip.solver import get_solver
+from magicwrap import get_solver
 from issatra.utils import flatten, max_var
 
 def color_graph_sat(G, num_colors=None):
@@ -177,37 +178,31 @@ def minimize_spill(intervals, num_registers, optimize=True):
     N = len(intervals)
 
     solver = get_solver("CBC")
-    var_reg2pick = [[solver.IntVar(0, 1) for _ in range(num_registers)] 
+    var_reg2pick = [[solver.var(0, 1) for _ in range(num_registers)] 
                                             for _ in range(N)]
 
     # at most one register per variable
-    var2assigned = []
-    for reg2pick in var_reg2pick:
-        assigned = solver.Sum(reg2pick) # is variable assigned to a register?
-        var2assigned.append(assigned)
-        solver.Add(assigned <= 1)
+    var2assigned = solver.sum(var_reg2pick) # is variable assigned to a register?
+    solver.add(*[assigned <= 1 for assigned in var2assigned])
 
     # variables that are live at the same time cannot share a register
     mutexes = intervals2cliques(intervals)
     for mutex in mutexes:
-        for var2pick in zip(*[var_reg2pick[idx] for idx in mutex]):
-            solver.Add(solver.Sum(var2pick) <= 1)
+        col2num_picked = solver.sum(zip(*[var_reg2pick[idx] for idx in mutex]))
+        solver.add(*[num_picked <= 1 for num_picked in col2num_picked])
 
     if optimize:
         var_value = [j - i for i, j in intervals] # live range length
         #var_value = [1 for c in intervals]
-        value = solver.Dot(var2assigned, var_value)
-        solver.SetObjective(value, maximize=True)
+        value = solver.dot(var2assigned, var_value)
+        solver.set_objective(value, maximize=True)
 
-    status = solver.Solve(time_limit=100)
+    status = solver.solve(time_limit=100)
     if status < 2:
-        var2reg = []
-        for reg2pick in var_reg2pick:
-            reg2pick_solved = [solver.solution_value(pick) for pick in reg2pick]
-            if 1 in reg2pick_solved:
-                var2reg.append(reg2pick_solved.index(1))
-            else:
-                var2reg.append(None)
+        var_reg2pick_solved = solver.solution_value(var_reg2pick)
+        picked_idx = lambda x: x.index(1) if 1 in x else None
+        var2reg = list(map(picked_idx, var_reg2pick_solved))
+        
         v = [reg for reg in var2reg if reg is not None]
         assigned_variables = len(v)
         spilled_variables = len(var2reg) - assigned_variables
