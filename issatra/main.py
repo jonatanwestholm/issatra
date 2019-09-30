@@ -35,7 +35,7 @@ def get_dag(N=10):
         #for j in get_preds(max(len(G), k), k):
         leafs = [node for node in G if not G[node]]
         for j in get_preds(leafs, min(len(leafs), k)):
-            G.add_edge(j, i, latency=np.random.randint(1, 2))
+            G.add_edge(j, i, latency=1) #np.random.randint(1, 2))
 
     for c in nx.simple_cycles(G):
         print(c)
@@ -57,7 +57,7 @@ def main():
     plot_intervals(intervals, interval2color)
     '''
 
-    G = get_dag(N=50)
+    G = get_dag(N=20)
     schedule_dag(G)
 
 

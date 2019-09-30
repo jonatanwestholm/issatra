@@ -227,7 +227,7 @@ def minimize_spill(intervals, num_registers, optimize=True):
 
 def schedule_dag(G, optimize=True):
     N = len(G)
-    T = int(1.2*N)
+    T = int(2*N)
 
     solver = get_solver("CBC")
     '''
@@ -269,6 +269,9 @@ def schedule_dag(G, optimize=True):
         for u_issued, v_issued in zip(instruction2issued[u], 
                                       instruction2issued[v][latency:]):
             solver.add(v_issued <= u_issued)
+
+        solver.add(instruction2issued[v][latency - 1] == 0)
+
 
     if optimize:
         ic2cost = np.linspace(0, 1.0, T)
