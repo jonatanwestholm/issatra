@@ -225,6 +225,70 @@ def minimize_spill(intervals, num_registers, optimize=True):
         return None
 
 
+def schedule_dag(G, optimize=True):
+    N = len(G)
+    T = int(1.2*N)
+
+    solver = get_solver("CBC")
+    '''
+    # the Swedish adjective 'svulstig' comes to mind...
+
+    instruction_ic2pick = solver.var_array([
+                            solver.var_array([
+                                solver.var(0, 1) for _ in range(T)])
+                                                    for _ in range(N)])
+
+    # each instruction gets at least one issue cycle
+    solver.add(solver.sum(instruction_ic2pick) >= 1)
+
+    # each issue cycle gets at most one instruction
+    solver.add(solver.sum(zip(*instruction_ic2pick)) <= 1)
+    '''
+
+    instruction_ic2pick = [[solver.var(0, 1) for _ in range(T)] 
+                                                for _ in range(N)]
+    
+    # each instruction gets exactly one issue cycle
+    for ic2pick in instruction_ic2pick:
+        solver.add(solver.sum(ic2pick) == 1)
+
+    # each issue cycle gets at most one instruction
+    ic2taken = solver.var_array([solver.sum(instruction2pick) 
+                                    for instruction2pick in zip(*instruction_ic2pick)])
+    for taken in ic2taken:
+        solver.add(taken <= 1)
+
+    # cumulative indicator whether instruction has been issued
+    instruction2issued = [solver.var_array([solver.sum(ic2pick[:ic+1]) 
+                            for ic in range(T)])
+                                for ic2pick in instruction_ic2pick]
+
+    # ensure true dependencies
+    for u, v, latency in G.edges(data="latency"):
+        #solver.add(instruction2issued[v][latency:] <= instruction2issued[u])
+        for u_issued, v_issued in zip(instruction2issued[u], 
+                                      instruction2issued[v][latency:]):
+            solver.add(v_issued <= u_issued)
+
+    if optimize:
+        ic2cost = np.linspace(0, 1.0, T)
+        cost = solver.dot(ic2taken, ic2cost)
+        solver.set_objective(cost, maximize=False)
+
+    status = solver.solve(time_limit=10)
+
+    if status < 2:
+        instruction_ic2pick_solved = solver.solution_value(instruction_ic2pick)
+        picked_idx = lambda x: x.index(1) if 1 in x else None
+        instruction2ic = list(map(picked_idx, instruction_ic2pick_solved))
+        print(instruction2ic)
+        return instruction2ic
+    else:
+        return None
+
+
+'''
+# Linprog solution that is actually incorrect
 def schedule_dag(G):
     N = len(G)
 
@@ -246,3 +310,4 @@ def schedule_dag(G):
         return solver.solution_value(issue_cycles)
     else:
         return None
+'''
