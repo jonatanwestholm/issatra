@@ -1,10 +1,14 @@
+import os
+import sys
+
 import time
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.patches import Rectangle
 
+import pydot
 import networkx as nx
-from issatra.models import color_intervals, minimize_spill, schedule_dag
+from issatra.models import allocate_registers, schedule_instructions
 from issatra.utils import flatten, optimize
 
 colors = ["r", "g", "b", "y", "m", "c", "k"]
@@ -22,7 +26,7 @@ def get_discrete_intervals(N=10, start=0, end=10):
     intervals = [(int(i), int(j) + 1) for i, j in intervals]
     return intervals
 
-def get_dag(N=10):
+def get_dependency_dag(N=10):
     G = nx.DiGraph()
     get_preds = lambda n, k: np.random.choice(n, k, replace=False)
 
@@ -30,12 +34,12 @@ def get_dag(N=10):
     for i in range(num_orphans):
         G.add_node(i)
 
-    k = 3
+    k = 2
     for i in range(num_orphans, N):
-        #for j in get_preds(max(len(G), k), k):
-        leafs = [node for node in G if not G[node]]
-        for j in get_preds(leafs, min(len(leafs), k)):
-            G.add_edge(j, i, latency=1) #np.random.randint(1, 2))
+        #leafs = [node for node in G if not G[node]]
+        #for j in get_preds(leafs, min(len(leafs), k)):
+        for j in get_preds(max(len(G), k), k):
+            G.add_edge(j, i, latency=2) #np.random.randint(1, 2))
 
     for c in nx.simple_cycles(G):
         print(c)
@@ -56,9 +60,11 @@ def main():
     interval2color = minimize_spill(intervals, num_registers=32)
     plot_intervals(intervals, interval2color)
     '''
-
-    G = get_dag(N=20)
-    schedule_dag(G)
+    G = get_dependency_dag(N=20)
+    instruction2ic = schedule_instructions(G)
+    
+    path = sys.argv[1]
+    to_png(path, "dag", G, instruction2ic)
 
 
 def plot_intervals(intervals, interval2color=None):
@@ -80,6 +86,22 @@ def plot_intervals(intervals, interval2color=None):
     ax.set_ylim([0, len(intervals)])
     plt.draw()
     plt.show()
+
+def to_png(path, filename, G, instruction2ic):
+    for u, v, data in G.edges(data=True):
+        pass
+
+    for u, data in G.nodes(data=True):
+        data["pos"] = "{0:d},{1:d}".format(0, instruction2ic[u] * 1)
+        #print(data["pos"])
+
+    #G.nodes["plant"]["color"] = "blue"
+
+    f = os.path.join(path, "tmp.dot")
+    p = os.path.join(path, "{}.png".format(filename))
+    nx.drawing.nx_pydot.write_dot(G, f)
+    (graph,) = pydot.graph_from_dot_file(f)
+    graph.write_png(p)
 
 
 if __name__ == '__main__':
