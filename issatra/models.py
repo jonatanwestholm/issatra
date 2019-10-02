@@ -253,14 +253,15 @@ def schedule_dag(G, optimize=True):
         solver.add(solver.sum(ic2pick) == 1)
 
     # each issue cycle gets at most one instruction
-    ic2taken = solver.var_array([solver.sum(instruction2pick) 
-                                    for instruction2pick in zip(*instruction_ic2pick)])
+    ic2taken = [solver.sum(instruction2pick) 
+                    for instruction2pick in zip(*instruction_ic2pick)]
+    
     for taken in ic2taken:
         solver.add(taken <= 1)
 
     # cumulative indicator whether instruction has been issued
-    instruction2issued = [solver.var_array([solver.sum(ic2pick[:ic+1]) 
-                            for ic in range(T)])
+    instruction2issued = [[solver.sum(ic2pick[:ic+1]) 
+                            for ic in range(T)]
                                 for ic2pick in instruction_ic2pick]
 
     # ensure true dependencies
